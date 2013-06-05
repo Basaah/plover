@@ -10,6 +10,9 @@ resumes stenotype translation and allows for application configuration.
 
 import os
 import wx
+
+import win32con #for the VK keycodes for hotkets, should perhaps be loaded from the os module.
+
 import ConfigParser
 import plover.app as app
 import plover.config as conf
@@ -64,6 +67,13 @@ class Frame(wx.Frame):
     COMMAND_CONFIGURE = 'CONFIGURE'
     COMMAND_FOCUS = 'FOCUS'
     COMMAND_QUIT = 'QUIT'
+    
+    HOTKEY_ID_SUSPEND = 10100
+    HOTKEY_ID_RESUME = 10101
+    HOTKEY_ID_TOGGLE = 10102
+    
+    HOTKEY_ID_SHOW_RAWDISP = 11110
+    HOTKEY_ID_HIDE_RAWDISP = 11111
 
     def __init__(self, config_file):
         wx.Frame.__init__(self, None,
@@ -149,8 +159,8 @@ class Frame(wx.Frame):
         if self.steno_engine:
             self.steno_engine.add_callback(self._update_status)
         self._update_status()
-
-        # TODO:  auto start the raw steno window when requested in config.
+        
+        self.regHotKeys()  #TODO: should only call this when on windows.
 
     def consume_command(self, command):
         # Wrap all actions in a CallAfter since the initiator of the
@@ -174,6 +184,36 @@ class Frame(wx.Frame):
             wx.CallAfter(self._show_raw_frame)
         elif command == self.COMMAND_HIDE_RAWDISP:
             wx.CallAfter(self._close_raw_frame)
+
+    def regHotKeys(self):
+        #TODO: Load hotkeys keycodes from config instead of hardcoded
+        self.RegisterHotKey(self.HOTKEY_ID_SUSPEND, win32con.MOD_ALT, win32con.VK_F1)   #alt F1  ,   suspend
+        self.Bind(wx.EVT_HOTKEY, self.handleHotKey_Suspend, id=self.HOTKEY_ID_SUSPEND)
+        
+        self.RegisterHotKey(self.HOTKEY_ID_RESUME, win32con.MOD_ALT, win32con.VK_F2)   #alt F2  ,  resume  
+        self.Bind(wx.EVT_HOTKEY, self.handleHotKey_Resume, id=self.HOTKEY_ID_RESUME)
+        
+        self.RegisterHotKey(self.HOTKEY_ID_TOGGLE, win32con.MOD_ALT, win32con.VK_F3)   #alt F3  ,  toggle  
+        self.Bind(wx.EVT_HOTKEY, self.handleHotKey_Toggle, id=self.HOTKEY_ID_TOGGLE)
+        
+        self.RegisterHotKey(self.HOTKEY_ID_SHOW_RAWDISP, win32con.MOD_ALT, win32con.VK_F5)   #alt F5  ,  disp raw
+        self.Bind(wx.EVT_HOTKEY, self.handleHotKey_Show_Raw, id=self.HOTKEY_ID_SHOW_RAWDISP)
+        
+        self.RegisterHotKey(self.HOTKEY_ID_HIDE_RAWDISP, win32con.MOD_ALT, win32con.VK_F6)   #alt F6  ,  hide disp raw
+        self.Bind(wx.EVT_HOTKEY, self.handleHotKey_Hide_Raw, id=self.HOTKEY_ID_HIDE_RAWDISP)
+
+
+    #I strongly feel that these below violate the Dry rule because I just copy pasted it from consume_command
+    def handleHotKey_Suspend(self,evt):
+        wx.CallAfter(self.steno_engine.set_is_running, False)
+    def handleHotKey_Resume(self,evt):
+        wx.CallAfter(self.steno_engine.set_is_running, True)
+    def handleHotKey_Toggle(self,evt):
+        wx.CallAfter(self.steno_engine.set_is_running, not self.steno_engine.is_running)
+    def handleHotKey_Show_Raw(self,evt):
+        wx.CallAfter(self._show_raw_frame)
+    def handleHotKey_Hide_Raw(self,evt):
+        wx.CallAfter(self._close_raw_frame)
 
     def _update_status(self):
         if self.steno_engine:
