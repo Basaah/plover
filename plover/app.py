@@ -126,13 +126,15 @@ class StenoEngine(object):
     configuration file, which is by default located at
     ~/.config/plover/plover.cfg and will be automatically generated with
     reasonable default values if it doesn't already exist.
+    
+    Also, on 4-6-2013 on this fork, I, Bas Wilbers, added a strokelist that outputs the raw steno in a little sidebar.
 
     In general, the only methods of interest in an instance of this class are
     start and stop.
 
     """
 
-    def __init__(self, engine_command_callback):
+    def __init__(self, engine_command_callback,strokelist):
         """Creates and configures a single steno pipeline."""
         self.subscribers = []
         self.is_running = False
@@ -141,6 +143,7 @@ class StenoEngine(object):
         self.translator = None
         self.formatter = None
         self.output = None
+        self.strokelist = strokelist
 
         # Check and use configuration
         self.config = conf.get_config()
@@ -181,6 +184,11 @@ class StenoEngine(object):
         self.translator = translation.Translator()
         self.translator.set_dictionary(user_dictionary)
         self.formatter = formatting.Formatter()
+        
+        
+        #Hook for logging to  rawsteno status window
+        # TODO: Check config file if this feature is turned on.
+        self.machine.add_callback(self._disp_raw_steno)
         
         # Add hooks for logging. Do this first so logs appear in order.
         if self.config.getboolean(conf.LOGGING_CONFIG_SECTION,
@@ -250,6 +258,70 @@ class StenoEngine(object):
 
         """
         self.subscribers.append(callback)
+    
+    #added 2013 by Bas Wilbers for rawsteno status window
+    #Can also be toggled with something like this from the dict.:
+    #"SWHAOR": "{PLOVER:SHOWRAW}",
+    #"WHEUD": "{PLOVER:HIDERAW}"
+    def _disp_raw_steno(self,steno_keys):
+        # TODO:  Output in a more pretty way with colours and such
+        #              Also what to output should be configurable 
+        if self.is_running:
+            pseudo = self.keys_to_pseudo(steno_keys)
+            index = self.strokelist.Append('Stroke(%s)' % ' '.join(steno_keys))
+            index = self.strokelist.Append('Pseudo= ' + self.mixer(pseudo))
+            self.strokelist.SetSelection(index)  #focus on the last
+    
+    def keys_to_pseudo(self,steno_keys):
+        pseudomap = [  (['S-','T-','P-','K-','W-'] ,'Z-'),
+                      (['S-','R-','K-','W-'] ,'J-'),
+                      (['S-','R-','H-'] ,'VL-'),
+                      (['S-','R-'] ,'V-'),
+                      (['T-','P-','K-','W-'] ,'G-'),
+                      (['T-','P-','H-'] ,'N-'),
+                      (['T-','P-'] ,'F-'),
+                      (['T-','K-'] ,'D-'),
+                      (['R-','K-','W-'] ,'Y-'),
+                      (['K-','W-'] ,'Q-'),
+                      (['K-','R-'] ,'C-'),
+                      (['H-','R-'] ,'L-'),
+                      (['H-','P-'] ,'M-'),
+                      (['P-','K-'] ,'X-'),
+                      (['P-','W-'] ,'B-'),
+                      (['-P','-L','-B','-G'],'-J'),
+                      (['-S','-B','-G'],'-X'),
+                      (['-B','-G'],'-K'),
+                      (['-B','-P'],'-N'),
+                      (['-L','-P'],'-M'),
+                      (['-E','-U'],'-I')]
+        for set,target in pseudomap:
+            steno_keys = self.replace_if_match(steno_keys,set,target)
+        return steno_keys
+        
+    def replace_if_match(self,keys,set,target):
+        modkeys = list(keys)
+        try:
+            for s in set: modkeys.remove(s)
+            modkeys.append(target)
+            return modkeys
+        except ValueError:
+            return keys #unchanged
+            
+    def mixer(self,keys):
+        vowels = 'A','O','E','U','I'
+        left = ''
+        vowel = ''
+        right = ''
+        for k in keys:
+            endk =  k[0] == '-'
+            k = k.strip('-')
+            if k in vowels:
+                if endk:  vowel += k
+                else:  vowel = k + vowel
+            else:
+                if endk:  right += k
+                else:  left += k
+        return left + vowel + right
 
     def _log_stroke(self, steno_keys):
         self.logger.info('Stroke(%s)' % ' '.join(steno_keys))

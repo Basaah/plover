@@ -44,7 +44,7 @@ class Frame(wx.Frame):
     """The top-level GUI element of the Plover application."""
 
     # Class constants.
-    TITLE = "Plover"
+    TITLE = "Plover alt"
     ALERT_DIALOG_TITLE = TITLE
     ON_IMAGE_FILE = "plover_on.png"
     OFF_IMAGE_FILE = "plover_off.png"
@@ -54,9 +54,13 @@ class Frame(wx.Frame):
     ERROR_MESSAGE = "error"
     CONFIGURE_BUTTON_LABEL = "Configure..."
     ABOUT_BUTTON_LABEL = "About..."
+    RAW_BUTTON_LABEL = "Disp RAW"
     COMMAND_SUSPEND = 'SUSPEND'
     COMMAND_RESUME = 'RESUME'
     COMMAND_TOGGLE = 'TOGGLE'
+    COMMAND_TOGGLE_RAWDISP = 'TOGGLERAW'
+    COMMAND_SHOW_RAWDISP = 'SHOWRAW'
+    COMMAND_HIDE_RAWDISP = 'HIDERAW'
     COMMAND_CONFIGURE = 'CONFIGURE'
     COMMAND_FOCUS = 'FOCUS'
     COMMAND_QUIT = 'QUIT'
@@ -73,10 +77,17 @@ class Frame(wx.Frame):
         config = ConfigParser.RawConfigParser()
         config.read(config_file)
 
+        #the raw steno stroke frame, as requested here https://github.com/plover/plover/issues/82
+        #The strokelist will contain the strokes and will be passed to the steno engine, so that a listener there can log strokes to it
+        self.strokeframe = wx.Frame(None, wx.ID_ANY, title="Raw Plover strokes",pos=wx.DefaultPosition,
+                          size=wx.DefaultSize,  style=wx.DEFAULT_FRAME_STYLE|wx.STAY_ON_TOP) 
+        self.strokeframe.Bind(wx.EVT_CLOSE,self._close_raw_frame) #instead of closing, just hide it.
+        self.strokelist = wx.ListBox(self.strokeframe,-1)
+        
         while True:
             # Check configuration loop
             try:
-                self.steno_engine = app.StenoEngine(self.consume_command)
+                self.steno_engine = app.StenoEngine(self.consume_command,self.strokelist)
                 break
             except InvalidConfigurationError, spe:
                 self.steno_engine = None
@@ -111,7 +122,11 @@ class Frame(wx.Frame):
         # About button.
         self.about_button = wx.Button(self, label=self.ABOUT_BUTTON_LABEL)
         self.about_button.Bind(wx.EVT_BUTTON, self._show_about_dialog)
-
+        
+        # Raw button.
+        self.raw_button = wx.Button(self, label=self.RAW_BUTTON_LABEL)
+        self.raw_button.Bind(wx.EVT_BUTTON, self._show_raw_frame)
+        
         # Layout.
         sizer = wx.BoxSizer(wx.HORIZONTAL)
         sizer.Add(self.status_button,
@@ -123,6 +138,10 @@ class Frame(wx.Frame):
         sizer.Add(self.about_button,
                   flag=wx.TOP | wx.BOTTOM | wx.RIGHT | wx.ALIGN_CENTER_VERTICAL,
                   border=self.BORDER)
+        sizer.Add(self.raw_button,
+                  flag=wx.TOP | wx.BOTTOM | wx.RIGHT | wx.ALIGN_CENTER_VERTICAL,
+                  border=self.BORDER)
+                  
         self.SetSizer(sizer)
         sizer.Fit(self)
 
@@ -130,6 +149,8 @@ class Frame(wx.Frame):
         if self.steno_engine:
             self.steno_engine.add_callback(self._update_status)
         self._update_status()
+
+        # TODO:  auto start the raw steno window when requested in config.
 
     def consume_command(self, command):
         # Wrap all actions in a CallAfter since the initiator of the
@@ -149,6 +170,10 @@ class Frame(wx.Frame):
             wx.CallAfter(self.Iconize, False)
         elif command == self.COMMAND_QUIT:
             wx.CallAfter(self._quit)
+        elif command == self.COMMAND_SHOW_RAWDISP:
+            wx.CallAfter(self._show_raw_frame)
+        elif command == self.COMMAND_HIDE_RAWDISP:
+            wx.CallAfter(self._close_raw_frame)
 
     def _update_status(self):
         if self.steno_engine:
@@ -167,6 +192,7 @@ class Frame(wx.Frame):
     def _quit(self, event=None):
         if self.steno_engine:
             self.steno_engine.destroy()
+        self.strokeframe.Destroy()
         self.Destroy()
 
     def _toggle_steno_engine(self, event=None):
@@ -201,3 +227,12 @@ class Frame(wx.Frame):
         info.Developers = __credits__
         info.License = __license__
         wx.AboutBox(info)
+        
+    def _show_raw_frame(self, event=None):
+        self.strokeframe.Show(True) 
+        #TODO,  toggle raw
+        
+    def _close_raw_frame(self, event=None):
+        self.strokeframe.Hide()
+        
+
